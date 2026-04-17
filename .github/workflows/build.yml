@@ -1,0 +1,76 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            targets: '@electron-forge/maker-dmg @electron-forge/maker-zip'
+          - os: ubuntu-latest
+            targets: '@electron-forge/maker-deb @electron-forge/maker-rpm'
+          # - os: windows-latest
+          #   targets: '@electron-forge/maker-squirrel'
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Install Python dependencies
+        run: pip install pyinstaller git+https://github.com/cfengine/cfengine-cli.git
+
+      - name: Build cfengine binary (PyInstaller)
+        shell: bash
+        run: |
+          pyinstaller --onedir --name cfengine \
+            --distpath ./python-dist \
+            --workpath ./pyinstaller-build \
+            --specpath ./pyinstaller-build \
+            --collect-all cfengine_cli \
+            --collect-all tree_sitter_cfengine \
+            --collect-all cfbs \
+            --collect-all cf_remote \
+            --hidden-import cfengine_cli.main \
+            --hidden-import tree_sitter \
+            --hidden-import tree_sitter_cfengine \
+            --hidden-import cfbs \
+            --hidden-import markdown_it \
+            --console \
+            "$(which cfengine)"
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Build Electron app
+        shell: bash
+        run: |
+          for target in ${{ matrix.targets }}; do
+            npx electron-forge make --targets "$target"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}
+          path: |
+            out/make/**/*.dmg
+            out/make/**/*.zip
+            out/make/**/*.deb
+            out/make/**/*.rpm
+            out/make/**/*.exe
+            out/make/**/*.nupkg
