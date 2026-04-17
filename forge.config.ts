@@ -19,10 +19,17 @@ const config: ForgeConfig = {
   hooks: {
     postPackage: async (_config, options) => {
       const outputPath = options.outputPaths[0];
-      const cfengineBin = join(outputPath, 'test-app.app', 'Contents', 'Resources', 'cfengine', 'cfengine');
+      const platform = options.platform;
+      let cfengineBin: string;
+      if (platform === 'darwin') {
+        const appName = require('./package.json').productName || require('./package.json').name;
+        cfengineBin = join(outputPath, `${appName}.app`, 'Contents', 'Resources', 'cfengine', 'cfengine');
+      } else {
+        cfengineBin = join(outputPath, 'resources', 'cfengine', 'cfengine');
+      }
       try {
         chmodSync(cfengineBin, 0o755);
-        console.log('Set execute permission on cfengine binary');
+        console.log(`Set execute permission on cfengine binary: ${cfengineBin}`);
       } catch (e) {
         console.warn('Could not chmod cfengine binary:', e);
       }
